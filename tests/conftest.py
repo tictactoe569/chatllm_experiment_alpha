@@ -8,6 +8,8 @@ from sqlalchemy.pool import StaticPool
 
 from backend.database import Base, get_db
 from backend.main import app
+from backend.models import ChatSession, User
+from backend.routers.auth import get_current_user
 
 
 @pytest.fixture(scope="session")
@@ -50,8 +52,26 @@ def db_session(engine, tables):
 
 
 @pytest.fixture
-def client(db_session):
-    """Retorna um TestClient do FastAPI com o banco de testes injetado."""
+def test_user(db_session) -> User:
+    user = User(email="test@test.com", password_hash="fakehash")
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    return user
+
+
+@pytest.fixture
+def test_session(db_session, test_user) -> ChatSession:
+    session = ChatSession(user_id=test_user.id)
+    db_session.add(session)
+    db_session.commit()
+    db_session.refresh(session)
+    return session
+
+
+@pytest.fixture
+def client(db_session, test_user):
+    """Retorna um TestClient do FastAPI com o banco de testes injetado e auth mockada."""
 
     def _override_get_db():
         try:
@@ -59,7 +79,11 @@ def client(db_session):
         finally:
             pass
 
+    def _override_get_current_user():
+        return test_user
+
     app.dependency_overrides[get_db] = _override_get_db
+    app.dependency_overrides[get_current_user] = _override_get_current_user
 
     with TestClient(app) as test_client:
         yield test_client

@@ -47,8 +47,43 @@ async function apiMe() {
   return response.json();
 }
 
-async function sendMessageStream({ message, history, onDelta, signal }) {
-  const response = await fetch(`${API_BASE}/api/chat/stream`, {
+async function apiListSessions() {
+  const response = await fetch(`${API_BASE}/api/sessions`, {
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw new Error("Erro ao listar sessoes");
+  const data = await response.json();
+  return data.sessions || [];
+}
+
+async function apiCreateSession() {
+  const response = await fetch(`${API_BASE}/api/sessions`, {
+    method: "POST",
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw new Error("Erro ao criar sessao");
+  return response.json();
+}
+
+async function apiDeleteSession(sessionId) {
+  const response = await fetch(`${API_BASE}/api/sessions/${sessionId}`, {
+    method: "DELETE",
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw new Error("Erro ao excluir sessao");
+  return response.json();
+}
+
+async function apiGetSessionMessages(sessionId) {
+  const response = await fetch(`${API_BASE}/api/sessions/${sessionId}/messages`, {
+    headers: getAuthHeaders(),
+  });
+  if (!response.ok) throw new Error("Erro ao carregar mensagens");
+  return response.json();
+}
+
+async function sendMessageStream({ message, history, sessionId, onDelta, signal }) {
+  const response = await fetch(`${API_BASE}/api/chat/stream${sessionId ? `?session_id=${sessionId}` : ""}`, {
     method: "POST",
     headers: getAuthHeaders(),
     body: JSON.stringify({ message, history }),
@@ -68,6 +103,7 @@ async function sendMessageStream({ message, history, onDelta, signal }) {
   const reader = response.body.getReader();
   const decoder = new TextDecoder("utf-8");
   let buffer = "";
+  let result = { sessionId: null, title: null };
 
   while (true) {
     const { value, done } = await reader.read();
@@ -100,6 +136,12 @@ async function sendMessageStream({ message, history, onDelta, signal }) {
       if (payload.delta) {
         onDelta(payload.delta);
       }
+
+      if (payload.done) {
+        result = { sessionId: payload.session_id, title: payload.title };
+      }
     }
   }
+
+  return result;
 }
