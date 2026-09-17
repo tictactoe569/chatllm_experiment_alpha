@@ -5,6 +5,11 @@ function createMessageId() {
 }
 
 function App() {
+  const [user, setUser] = useState(() => {
+    const stored = localStorage.getItem("auth_user");
+    return stored ? JSON.parse(stored) : null;
+  });
+  const [token, setToken] = useState(() => localStorage.getItem("auth_token") || null);
   const [messages, setMessages] = useState([
     {
       id: createMessageId(),
@@ -33,6 +38,31 @@ function App() {
       abortControllerRef.current?.abort();
     };
   }, []);
+
+  const onAuthSuccess = (userData, authToken) => {
+    setUser(userData);
+    setToken(authToken);
+  };
+
+  const handleLogout = async () => {
+    await apiLogout().catch(() => {});
+    localStorage.removeItem("auth_token");
+    localStorage.removeItem("auth_user");
+    setUser(null);
+    setToken(null);
+    setMessages([
+      {
+        id: createMessageId(),
+        role: "assistant",
+        content: "Bem-vindo ao ChatLLM Lab. Como posso ajudar voce hoje?",
+      },
+    ]);
+    setError("");
+  };
+
+  if (!user) {
+    return <Auth onAuthSuccess={onAuthSuccess} />;
+  }
 
   const onStop = () => {
     abortControllerRef.current?.abort();
@@ -110,9 +140,13 @@ function App() {
 
   return (
     <main className="app-shell">
-      <header className="app-header">
+      <div className="app-header-auth">
         <div className="brand">ChatLLM Lab</div>
-      </header>
+        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <span style={{ fontSize: "0.85rem", color: "var(--muted)" }}>{user.email}</span>
+          <button className="logout-btn" onClick={handleLogout}>Sair</button>
+        </div>
+      </div>
 
       <section className="messages" aria-live="polite" ref={messagesRef}>
         <div className="messages-inner">
@@ -133,7 +167,7 @@ function App() {
         onStop={onStop}
       />
 
-      <div className="warning-banner">Lembre-se, você precisa focar no experimento!!!</div>
+      <div className="warning-banner">Lembre-se, voce precisa focar no experimento!!!</div>
     </main>
   );
 }
