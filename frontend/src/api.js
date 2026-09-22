@@ -41,11 +41,11 @@ async function fetchMe() {
 
 // ── Chat ──────────────────────────────────────────────────────────────────────
 
-async function sendMessageStream({ message, history, onDelta, signal }) {
+async function sendMessageStream({ message, history, sessionId, onDelta, signal }) {
   const response = await fetch(`${API_BASE}/api/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message, history }),
+    body: JSON.stringify({ message, history, session_id: sessionId }),
     signal,
   });
 
@@ -96,4 +96,46 @@ async function sendMessageStream({ message, history, onDelta, signal }) {
       }
     }
   }
+}
+
+// ── Sessions ──────────────────────────────────────────────────────────────────
+
+async function fetchSessions() {
+  const response = await fetch(`${API_BASE}/api/sessions`);
+  if (!response.ok) throw new Error("Erro ao listar sessoes");
+  return response.json();
+}
+
+async function createSession(title) {
+  const response = await fetch(`${API_BASE}/api/sessions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title: title || "" }),
+  });
+  if (!response.ok) throw new Error("Erro ao criar sessao");
+  return response.json();
+}
+
+async function updateSessionTitle(sessionId, title) {
+  const response = await fetch(`${API_BASE}/api/sessions/${sessionId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  if (!response.ok) throw new Error("Erro ao atualizar titulo");
+  return response.json();
+}
+
+async function deleteSession(sessionId) {
+  const response = await fetch(`${API_BASE}/api/sessions/${sessionId}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) throw new Error("Erro ao deletar sessao");
+  return response.json();
+}
+
+async function fetchSessionMessages(sessionId) {
+  const response = await fetch(`${API_BASE}/api/sessions/${sessionId}/messages`);
+  if (!response.ok) throw new Error("Erro ao carregar mensagens");
+  return response.json();
 }

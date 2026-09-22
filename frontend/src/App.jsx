@@ -5,7 +5,7 @@ function createMessageId() {
 }
 
 function AuthScreen({ onAuthSuccess }) {
-  const [mode, setMode] = useState("login"); // "login" | "register"
+  const [mode, setMode] = useState("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -70,19 +70,86 @@ function AuthScreen({ onAuthSuccess }) {
   );
 }
 
+function Sidebar({ sessions, activeSessionId, onSelectSession, onCreateSession, onDeleteSession, onRenameSession }) {
+  const [editingId, setEditingId] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (editingId) inputRef.current?.focus();
+  }, [editingId]);
+
+  const handleStartEdit = (session) => {
+    setEditingId(session.id);
+    setEditTitle(session.title);
+  };
+
+  const handleFinishEdit = () => {
+    if (editingId && editTitle.trim()) {
+      onRenameSession(editingId, editTitle.trim());
+    }
+    setEditingId(null);
+    setEditTitle("");
+  };
+
+  return (
+    <aside className="sidebar">
+      <div className="sidebar-header">
+        <button className="new-chat-btn" onClick={onCreateSession} title="Nova conversa">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 2a.75.75 0 0 1 .75.75v4.5h4.5a.75.75 0 0 1 0 1.5h-4.5v4.5a.75.75 0 0 1-1.5 0v-4.5h-4.5a.75.75 0 0 1 0-1.5h4.5v-4.5A.75.75 0 0 1 8 2z"/></svg>
+          Nova conversa
+        </button>
+      </div>
+      <div className="sidebar-list">
+        {sessions.map((s) => (
+          <div
+            key={s.id}
+            className={`sidebar-item ${s.id === activeSessionId ? "active" : ""}`}
+            onClick={() => onSelectSession(s.id)}
+          >
+            {editingId === s.id ? (
+              <input
+                ref={inputRef}
+                className="sidebar-edit-input"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                onBlur={handleFinishEdit}
+                onKeyDown={(e) => { if (e.key === "Enter") handleFinishEdit(); }}
+                onClick={(e) => e.stopPropagation()}
+              />
+            ) : (
+              <>
+                <span className="sidebar-item-title" onDoubleClick={() => handleStartEdit(s)}>
+                  {s.title || "Nova conversa"}
+                </span>
+                <button
+                  className="sidebar-item-del"
+                  onClick={(e) => { e.stopPropagation(); onDeleteSession(s.id); }}
+                  title="Deletar"
+                >
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M4.646 4.646a.5.5 0 0 1 .708 0L8 7.293l2.646-2.647a.5.5 0 0 1 .708.708L8.707 8l2.647 2.646a.5.5 0 0 1-.708.708L8 8.707l-2.646 2.647a.5.5 0 0 1-.708-.708L7.293 8 4.646 5.354a.5.5 0 0 1 0-.708z"/>
+                  </svg>
+                </button>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+    </aside>
+  );
+}
+
 function App() {
   const [user, setUser] = useState(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
-  const [messages, setMessages] = useState([
-    {
-      id: createMessageId(),
-      role: "assistant",
-      content: "Bem-vindo ao ChatLLM Lab. Como posso ajudar voce hoje?",
-    },
-  ]);
+  const [sessions, setSessions] = useState([]);
+  const [activeSessionId, setActiveSessionId] = useState(null);
+  const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const messagesRef = useRef(null);
   const abortControllerRef = useRef(null);
 
@@ -94,6 +161,34 @@ function App() {
       .catch(() => {})
       .finally(() => setCheckingAuth(false));
   }, []);
+
+  // Load sessions on mount
+  useEffect(() => {
+    if (!user) return;
+    fetchSessions().then((data) => {
+      setSessions(data);
+      if (data.length > 0) {
+        setActiveSessionId(data[0].id);
+      }
+    }).catch(() => {});
+  }, [user]);
+
+  // Load messages when active session changes
+  useEffect(() => {
+    if (!activeSessionId) {
+      setMessages([]);
+      return;
+    }
+    fetchSessionMessages(activeSessionId).then((data) => {
+      setMessages(
+        data.messages.map((m) => ({
+          id: createMessageId(),
+          role: m.role,
+          content: m.content,
+        }))
+      );
+    }).catch(() => {});
+  }, [activeSessionId]);
 
   const chatHistory = useMemo(
     () => messages.filter((msg) => msg.role === "user" || msg.role === "assistant"),
@@ -117,10 +212,66 @@ function App() {
     setBusy(false);
   };
 
+  const handleCreateSession = async () => {
+    try {
+      const session = await createSession("");
+      setSessions((prev) => [session, ...prev]);
+      setActiveSessionId(session.id);
+      setMessages([]);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleDeleteSession = async (sessionId) => {
+    try {
+      await deleteSession(sessionId);
+      setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+      if (activeSessionId === sessionId) {
+        const remaining = sessions.filter((s) => s.id !== sessionId);
+        if (remaining.length > 0) {
+          setActiveSessionId(remaining[0].id);
+        } else {
+          setActiveSessionId(null);
+          setMessages([]);
+        }
+      }
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleRenameSession = async (sessionId, title) => {
+    try {
+      const updated = await updateSessionTitle(sessionId, title);
+      setSessions((prev) => prev.map((s) => (s.id === sessionId ? updated : s)));
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  const handleSelectSession = (sessionId) => {
+    setActiveSessionId(sessionId);
+  };
+
   const onSubmit = async (event, inputRef) => {
     event.preventDefault();
     const cleaned = text.trim();
     if (!cleaned || busy) return;
+
+    // Auto-create session if none active
+    let sessionId = activeSessionId;
+    if (!sessionId) {
+      try {
+        const session = await createSession("");
+        setSessions((prev) => [session, ...prev]);
+        sessionId = session.id;
+        setActiveSessionId(session.id);
+      } catch (err) {
+        setError(err.message);
+        return;
+      }
+    }
 
     setError("");
     const userMessage = { id: createMessageId(), role: "user", content: cleaned };
@@ -140,6 +291,7 @@ function App() {
       await sendMessageStream({
         message: cleaned,
         history: chatHistory,
+        sessionId,
         signal: abortController.signal,
         onDelta: (delta) => {
           setMessages((prev) =>
@@ -159,6 +311,10 @@ function App() {
             : msg
         )
       );
+
+      // Refresh sessions to get updated title
+      const data = await fetchSessions();
+      setSessions(data);
     } catch (err) {
       const aborted = err?.name === "AbortError";
       if (!aborted) {
@@ -191,13 +347,9 @@ function App() {
     } catch {}
     localStorage.removeItem("auth_token");
     setUser(null);
-    setMessages([
-      {
-        id: createMessageId(),
-        role: "assistant",
-        content: "Bem-vindo ao ChatLLM Lab. Como posso ajudar voce hoje?",
-      },
-    ]);
+    setSessions([]);
+    setActiveSessionId(null);
+    setMessages([]);
   };
 
   if (checkingAuth) return null;
@@ -207,36 +359,56 @@ function App() {
   }
 
   return (
-    <main className="app-shell">
-      <header className="app-header">
-        <div className="brand">ChatLLM Lab</div>
-        <div className="header-right">
-          <span className="user-email">{user.email}</span>
-          <button className="logout-btn" onClick={handleLogout}>Sair</button>
-        </div>
-      </header>
-
-      <section className="messages" aria-live="polite" ref={messagesRef}>
-        <div className="messages-inner">
-          {messages.map((msg) => (
-            <article key={msg.id} className={`bubble ${msg.role}`}>
-              <MessageContent content={msg.content} />
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <Composer
-        text={text}
-        busy={busy}
-        error={error}
-        onChangeText={setText}
-        onSubmit={onSubmit}
-        onStop={onStop}
+    <div className="app-layout">
+      <Sidebar
+        sessions={sessions}
+        activeSessionId={activeSessionId}
+        onSelectSession={handleSelectSession}
+        onCreateSession={handleCreateSession}
+        onDeleteSession={handleDeleteSession}
+        onRenameSession={handleRenameSession}
       />
+      <main className="app-main">
+        <header className="app-header">
+          <button className="sidebar-toggle" onClick={() => setSidebarOpen(!sidebarOpen)}>
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="currentColor">
+              <path fillRule="evenodd" d="M2.5 12a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5z"/>
+            </svg>
+          </button>
+          <div className="brand">ChatLLM Lab</div>
+          <div className="header-right">
+            <span className="user-email">{user.email}</span>
+            <button className="logout-btn" onClick={handleLogout}>Sair</button>
+          </div>
+        </header>
 
-      <div className="warning-banner">Lembre-se, voce precisa focar no experimento!!!</div>
-    </main>
+        <section className="messages" aria-live="polite" ref={messagesRef}>
+          <div className="messages-inner">
+            {messages.length === 0 && (
+              <div className="welcome-msg">
+                <p>Bem-vindo ao ChatLLM Lab. Como posso ajudar voce hoje?</p>
+              </div>
+            )}
+            {messages.map((msg) => (
+              <article key={msg.id} className={`bubble ${msg.role}`}>
+                <MessageContent content={msg.content} />
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <Composer
+          text={text}
+          busy={busy}
+          error={error}
+          onChangeText={setText}
+          onSubmit={onSubmit}
+          onStop={onStop}
+        />
+
+        <div className="warning-banner">Lembre-se, voce precisa focar no experimento!!!</div>
+      </main>
+    </div>
   );
 }
 
