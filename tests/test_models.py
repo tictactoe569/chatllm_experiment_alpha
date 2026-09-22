@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from backend.models import ChatMessage
+import pytest
+
+from backend.models import ChatMessage, User, UserSession
 
 
 class TestChatMessage:
@@ -98,6 +100,85 @@ class TestChatMessage:
         after = datetime.now(timezone.utc).replace(tzinfo=None)
 
         assert before <= msg.created_at <= after
+
+
+class TestUser:
+    def test_create_user(self, db_session):
+        user = User(email="user@test.com", password_hash="hash123")
+        db_session.add(user)
+        db_session.commit()
+        db_session.refresh(user)
+
+        assert user.id is not None
+        assert user.email == "user@test.com"
+        assert user.password_hash == "hash123"
+        assert isinstance(user.created_at, datetime)
+
+    def test_unique_email(self, db_session):
+        user1 = User(email="unique@test.com", password_hash="hash1")
+        db_session.add(user1)
+        db_session.commit()
+
+        user2 = User(email="unique@test.com", password_hash="hash2")
+        db_session.add(user2)
+        with pytest.raises(Exception):
+            db_session.commit()
+
+    def test_user_session_relationship(self, db_session):
+        user = User(email="rel@test.com", password_hash="hash")
+        db_session.add(user)
+        db_session.commit()
+
+        session = UserSession(user_id=user.id, token="token-abc")
+        db_session.add(session)
+        db_session.commit()
+        db_session.refresh(user)
+
+        assert len(user.sessions) == 1
+        assert user.sessions[0].token == "token-abc"
+
+    def test_cascade_delete(self, db_session):
+        user = User(email="cascade@test.com", password_hash="hash")
+        db_session.add(user)
+        db_session.commit()
+
+        session = UserSession(user_id=user.id, token="token-cascade")
+        db_session.add(session)
+        db_session.commit()
+
+        db_session.delete(user)
+        db_session.commit()
+
+        sessions = db_session.query(UserSession).filter(UserSession.token == "token-cascade").all()
+        assert len(sessions) == 0
+
+
+class TestUserSession:
+    def test_create_session(self, db_session):
+        user = User(email="session@test.com", password_hash="hash")
+        db_session.add(user)
+        db_session.commit()
+
+        session = UserSession(user_id=user.id, token="token-xyz")
+        db_session.add(session)
+        db_session.commit()
+        db_session.refresh(session)
+
+        assert session.id is not None
+        assert session.token == "token-xyz"
+        assert session.user_id == user.id
+        assert isinstance(session.created_at, datetime)
+
+    def test_unique_token(self, db_session):
+        user = User(email="uniqtok@test.com", password_hash="hash")
+        db_session.add(user)
+        db_session.commit()
+
+        s1 = UserSession(user_id=user.id, token="same-token")
+        s2 = UserSession(user_id=user.id, token="same-token")
+        db_session.add_all([s1, s2])
+        with pytest.raises(Exception):
+            db_session.commit()
 
     def test_content_persists_long_text(self, db_session):
         """Deve persistir conteudos longos corretamente."""

@@ -1,5 +1,46 @@
 const API_BASE = window.location.origin;
 
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
+async function apiAuth(method, endpoint, body) {
+  const headers = { "Content-Type": "application/json" };
+  const token = localStorage.getItem("auth_token");
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(data.detail || `Erro ${response.status}`);
+  }
+  return data;
+}
+
+async function register(email, password) {
+  return apiAuth("POST", "/api/auth/register", { email, password });
+}
+
+async function login(email, password) {
+  return apiAuth("POST", "/api/auth/login", { email, password });
+}
+
+async function logout() {
+  const token = localStorage.getItem("auth_token");
+  return apiAuth("POST", `/api/auth/logout?token=${encodeURIComponent(token || "")}`);
+}
+
+async function fetchMe() {
+  const token = localStorage.getItem("auth_token");
+  if (!token) return null;
+  return apiAuth("GET", `/api/auth/me?token=${encodeURIComponent(token)}`);
+}
+
+// ── Chat ──────────────────────────────────────────────────────────────────────
+
 async function sendMessageStream({ message, history, onDelta, signal }) {
   const response = await fetch(`${API_BASE}/api/chat/stream`, {
     method: "POST",

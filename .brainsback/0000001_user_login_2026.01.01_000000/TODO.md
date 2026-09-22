@@ -5,17 +5,27 @@
 **Hard rule**: AI agents must not edit this file and must not draft paste-ready content for it.
 
 ## The Problem
-_State clearly what you are trying to achieve and the architectural constraints, avoiding implementation specifics of HOW to do it. Focus on WHAT and WHY._
+Preciso da implementação das seguintes features na aplicação:
+1. Cadastro/login por email e senha.
+2. Logout funcional.
+3. Dados de autenticacao persistidos no SQLite.
 
 ## Steps
-- [ ] _Decompose the problem into actionable logical steps._
-- [ ] _Each step should represent a verifiable piece of work._
+- Analise a arquitetura do projeto atual para ver como implementar as features solicitadas da maneira mais organizada e eficiente possivel. Evidencie caso seja necessário refatoração de código ja existente
+- Monte e execute um plano de ação de acordo com seu julgamento para a implementação das features (explicite esse plano ao executa-lo na conversa)
+- Após a implementação, rode uma série de testes automatizados para verificar o pleno funcionamento das features implementadas
+
 
 ## Success Looks Like
-- [ ] _Define rigorous, observable criteria for success. E.g., The endpoint returns 200 OK with the user object, NOT Code compiles_
+- Um sistema de cadastro bem feito, onde não é possível situações como utilizar um email ja existente
+- Um sistema de login bem feito, onde apenas com as credenciais corretas é possivel entrar no sistema
+- Um sistema de logout bem feito, que apenas finaliza a sessão daquele usuario, mas mantem suas credenciais no sistema
+- Uma persistencia de dados coerente com o solicitado
 
 ## Notes
-- [ ] _Any specific edge cases, libraries to consider, or potential pitfalls._
+- não é necessario verificação de senha forte
+- pode desenvolver features visuais muito simples para as funcionalidades
 
 ---
 **⚠️ HUMAN ONLY**: This file is your strategic space. AI agents must not edit it.
+
