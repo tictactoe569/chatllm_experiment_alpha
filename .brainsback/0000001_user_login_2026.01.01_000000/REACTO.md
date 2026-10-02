@@ -7,23 +7,44 @@
 ## R — Repeat (The Problem)
 _State the problem in your own words. Confirm that you share the same mental model of the goal._
 
+Na tarefa 1, é necessario implementar um sistema de login e logout na aplicacao, com o objetivo de deixar privado os chats dos usuarios, ou seja, para que nenhum usuario acesse o chat que nao é o seu.
+
 ## E — Examples
 _Provide concrete inputs and expected outputs that demonstrate the correctness. Base them on observable behavior._
 
-- **Happy Path Input**: ...
-  **Output**: ...
+- **Happy Path Input**: Username: Caio ; password: Cleiton123!
+  **Output**: login realizado
 
-- **Edge Case Input**: ...
-  **Output**: ...
+- **Edge Case Input**: Username: Caio ; password: cleiton123!
+  **Output**: falta ao menos uma letra maiuscula
+
+- **Edge Case Input**: Username: Caio ; password: Cleiton123
+  **Output**: falta um caracter especial
+
+- **Edge Case Input**: Username: Caio ; password: CLEITON123!
+  **Output**: falta uma letra minuscula
+
+- **Edge Case Input**: Username: Caio ; password: cleitonnnn!
+  **Output**: falta um numero
+
+- **Edge Case Input**: Username: Caio ; password: cleit1!
+  **Output**: a senha deve possuir 8 ou mais caracteres
 
 ## A — Approach
-_Describe your high-level strategy conceptually. How did you design the solution?_
+Mecanismo de autenticacao escolhido: JWT;
+Onde a senha é armazenada e como? hash com bcrypt
+Como as rotas de chat são protegidas? dependência get_current_user com Depends
+Como o frontend gerencia o token? localStorage, header Authorization
+Como o logout funciona? o token é descartado no cliente — não há estado no servidor
 
 ## C — Code
-_Identify the most critical code changes, format as actual files, functions, or methods. Justify the intent of your design choices rather than just acknowledging the syntax changes._
+
+backend/services/auth.py, essa foi a mudança mais critica no codigo, pois sem as mudanças nesse arquivo, qualquer senha entraria mesmo sem as 5 regras impostas
 
 ## T — Tests
-_Explain how the solution was validated, pointing to the actual test files, functions, or methods. Document any manual or automated tests._
+
+A solucao foi validada por um arquivo de teste automatico, sendo ele o test_chat.py, os outros testes foram feitos manualmente.
 
 ## O — Optimize
-_Address Big(O) complexity, note that sometimes it doesn't apply, trade-offs, constraints, and opportunities for future improvement._
+
+complexidade O(1), caso o sistema fosse para producao, adicionaria mais campos para validacao do usuario.

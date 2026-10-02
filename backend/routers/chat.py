@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import json
 
@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 
 from backend.config import OPENROUTER_MODEL_DEFAULT
 from backend.database import get_db
-from backend.models import ChatMessage
+from backend.models import ChatMessage, User
+from backend.routers.auth import get_current_user
 from backend.schemas.chat import ChatRequest, ChatResponse
 from backend.services.openrouter import OpenRouterConfigError, generate_reply, stream_reply
 
@@ -22,7 +23,7 @@ def health_check() -> dict[str, str]:
 
 
 @router.post("/api/chat", response_model=ChatResponse)
-async def chat(payload: ChatRequest, db: Session = Depends(get_db)) -> ChatResponse:
+async def chat(payload: ChatRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> ChatResponse:
     try:
         reply, model_name = await generate_reply(
             user_message=payload.message,
@@ -36,16 +37,15 @@ async def chat(payload: ChatRequest, db: Session = Depends(get_db)) -> ChatRespo
 
     resolved_model = payload.model or model_name or OPENROUTER_MODEL_DEFAULT
 
-    # Persistimos apenas o fluxo basico de mensagens; sessoes e titulos sao tarefa do participante.
-    db.add(ChatMessage(session_key="default", role="user", content=payload.message, model=resolved_model))
-    db.add(ChatMessage(session_key="default", role="assistant", content=reply, model=resolved_model))
+    db.add(ChatMessage(user_id=current_user.id, session_key="default", role="user", content=payload.message, model=resolved_model))
+    db.add(ChatMessage(user_id=current_user.id, session_key="default", role="assistant", content=reply, model=resolved_model))
     db.commit()
 
     return ChatResponse(reply=reply, model=resolved_model)
 
 
 @router.post("/api/chat/stream")
-async def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> StreamingResponse:
+async def chat_stream(payload: ChatRequest, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> StreamingResponse:
     resolved_model = payload.model or OPENROUTER_MODEL_DEFAULT
 
     async def event_generator():
@@ -57,17 +57,18 @@ async def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> St
                 model=payload.model,
             ):
                 full_reply += delta
-                yield f"data: {json.dumps({'delta': delta}, ensure_ascii=True)}\n\n"
+                yield f"data: {json.dumps({"delta": delta}, ensure_ascii=True)}\n\n"
         except OpenRouterConfigError as exc:
-            yield f"data: {json.dumps({'error': str(exc)}, ensure_ascii=True)}\n\n"
+            yield f"data: {json.dumps({"error": str(exc)}, ensure_ascii=True)}\n\n"
             return
         except RuntimeError as exc:
-            yield f"data: {json.dumps({'error': str(exc)}, ensure_ascii=True)}\n\n"
+            yield f"data: {json.dumps({"error": str(exc)}, ensure_ascii=True)}\n\n"
             return
 
         if full_reply.strip():
             db.add(
                 ChatMessage(
+                    user_id=current_user.id,
                     session_key="default",
                     role="user",
                     content=payload.message,
@@ -76,6 +77,7 @@ async def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> St
             )
             db.add(
                 ChatMessage(
+                    user_id=current_user.id,
                     session_key="default",
                     role="assistant",
                     content=full_reply,
@@ -84,7 +86,7 @@ async def chat_stream(payload: ChatRequest, db: Session = Depends(get_db)) -> St
             )
             db.commit()
 
-        yield f"data: {json.dumps({'done': True}, ensure_ascii=True)}\n\n"
+        yield f"data: {json.dumps({"done": True}, ensure_ascii=True)}\n\n"
 
     return StreamingResponse(
         event_generator(),

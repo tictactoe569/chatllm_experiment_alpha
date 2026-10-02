@@ -5,6 +5,7 @@ function createMessageId() {
 }
 
 function App() {
+  const [authenticated, setAuthenticated] = useState(isLoggedIn());
   const [messages, setMessages] = useState([
     {
       id: createMessageId(),
@@ -33,6 +34,23 @@ function App() {
       abortControllerRef.current?.abort();
     };
   }, []);
+
+  const onAuthenticated = () => {
+    setAuthenticated(true);
+  };
+
+  const handleLogout = () => {
+    logoutUser();
+    setAuthenticated(false);
+    setMessages([
+      {
+        id: createMessageId(),
+        role: "assistant",
+        content: "Bem-vindo ao ChatLLM Lab. Como posso ajudar voce hoje?",
+      },
+    ]);
+    setError("");
+  };
 
   const onStop = () => {
     abortControllerRef.current?.abort();
@@ -108,10 +126,15 @@ function App() {
     }
   };
 
+  if (!authenticated) {
+    return <AuthScreen onAuthenticated={onAuthenticated} />;
+  }
+
   return (
     <main className="app-shell">
       <header className="app-header">
         <div className="brand">ChatLLM Lab</div>
+        <button className="logout-btn" onClick={handleLogout}>Sair</button>
       </header>
 
       <section className="messages" aria-live="polite" ref={messagesRef}>
@@ -133,7 +156,7 @@ function App() {
         onStop={onStop}
       />
 
-      <div className="warning-banner">Lembre-se, você precisa focar no experimento!!!</div>
+      <div className="warning-banner">Lembre-se, voce precisa focar no experimento!!!</div>
     </main>
   );
 }

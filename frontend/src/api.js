@@ -1,9 +1,10 @@
 const API_BASE = window.location.origin;
 
 async function sendMessageStream({ message, history, onDelta, signal }) {
+  const headers = { "Content-Type": "application/json", ...getAuthHeaders() };
   const response = await fetch(`${API_BASE}/api/chat/stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({ message, history }),
     signal,
   });
