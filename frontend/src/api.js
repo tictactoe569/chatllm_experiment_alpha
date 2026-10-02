@@ -1,11 +1,11 @@
 const API_BASE = window.location.origin;
 
-async function sendMessageStream({ message, history, onDelta, signal }) {
+async function sendMessageStream({ message, history, sessionId, signal, onDelta, onDone }) {
   const headers = { "Content-Type": "application/json", ...getAuthHeaders() };
   const response = await fetch(`${API_BASE}/api/chat/stream`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ message, history }),
+    body: JSON.stringify({ message, history, session_id: sessionId }),
     signal,
   });
 
@@ -53,6 +53,10 @@ async function sendMessageStream({ message, history, onDelta, signal }) {
 
       if (payload.delta) {
         onDelta(payload.delta);
+      }
+
+      if (payload.done && onDone) {
+        onDone(payload);
       }
     }
   }

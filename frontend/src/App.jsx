@@ -6,13 +6,9 @@ function createMessageId() {
 
 function App() {
   const [authenticated, setAuthenticated] = useState(isLoggedIn());
-  const [messages, setMessages] = useState([
-    {
-      id: createMessageId(),
-      role: "assistant",
-      content: "Bem-vindo ao ChatLLM Lab. Como posso ajudar voce hoje?",
-    },
-  ]);
+  const [sessions, setSessions] = useState([]);
+  const [activeSessionId, setActiveSessionId] = useState(null);
+  const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -35,20 +31,94 @@ function App() {
     };
   }, []);
 
+  // Carrega sessoes ao autenticar
+  const loadSessions = async () => {
+    try {
+      const list = await fetchSessions();
+      setSessions(list);
+      if (list.length > 0) {
+        selectSession(list[0].id);
+      } else {
+        await createSessionAndSelect();
+      }
+    } catch {
+      // Se falhar, cria uma sessao nova
+      await createSessionAndSelect();
+    }
+  };
+
+  const createSessionAndSelect = async () => {
+    try {
+      const s = await createSession();
+      setSessions((prev) => [s, ...prev]);
+      setActiveSessionId(s.id);
+      setMessages([]);
+    } catch {
+      // fallback: modo sem sessoes
+      setMessages([{ id: createMessageId(), role: "assistant", content: "Bem-vindo ao ChatLLM Lab. Como posso ajudar voce hoje?" }]);
+    }
+  };
+
+  const selectSession = async (sessionId) => {
+    setActiveSessionId(sessionId);
+    setMessages([]);
+    // Carrega historico da sessao
+    try {
+      const res = await fetch(`${window.location.origin}/api/chat/history/${sessionId}`, {
+        headers: { ...getAuthHeaders() },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.length > 0) {
+          setMessages(data.map((m) => ({ id: createMessageId(), role: m.role, content: m.content })));
+          return;
+        }
+      }
+    } catch {
+      // ignora
+    }
+    setMessages([{ id: createMessageId(), role: "assistant", content: "Bem-vindo ao ChatLLM Lab. Como posso ajudar voce hoje?" }]);
+  };
+
+  const handleNewSession = async () => {
+    try {
+      const s = await createSession();
+      setSessions((prev) => [s, ...prev]);
+      setActiveSessionId(s.id);
+      setMessages([{ id: createMessageId(), role: "assistant", content: "Bem-vindo ao ChatLLM Lab. Como posso ajudar voce hoje?" }]);
+    } catch {
+      // ignora
+    }
+  };
+
+  const handleDeleteSession = async (sessionId) => {
+    try {
+      await deleteSessionApi(sessionId);
+      const updated = sessions.filter((s) => s.id !== sessionId);
+      setSessions(updated);
+      if (activeSessionId === sessionId) {
+        if (updated.length > 0) {
+          selectSession(updated[0].id);
+        } else {
+          handleNewSession();
+        }
+      }
+    } catch {
+      // ignora
+    }
+  };
+
   const onAuthenticated = () => {
     setAuthenticated(true);
+    loadSessions();
   };
 
   const handleLogout = () => {
     logoutUser();
     setAuthenticated(false);
-    setMessages([
-      {
-        id: createMessageId(),
-        role: "assistant",
-        content: "Bem-vindo ao ChatLLM Lab. Como posso ajudar voce hoje?",
-      },
-    ]);
+    setSessions([]);
+    setActiveSessionId(null);
+    setMessages([]);
     setError("");
   };
 
@@ -81,6 +151,7 @@ function App() {
       await sendMessageStream({
         message: cleaned,
         history: chatHistory,
+        sessionId: activeSessionId,
         signal: abortController.signal,
         onDelta: (delta) => {
           setMessages((prev) =>
@@ -90,6 +161,15 @@ function App() {
                 : msg
             )
           );
+        },
+        onDone: (data) => {
+          if (data.session_id && data.session_title) {
+            setSessions((prev) =>
+              prev.map((s) =>
+                s.id === data.session_id ? { ...s, title: data.session_title } : s
+              )
+            );
+          }
         },
       });
 
@@ -132,31 +212,40 @@ function App() {
 
   return (
     <main className="app-shell">
-      <header className="app-header">
-        <div className="brand">ChatLLM Lab</div>
-        <button className="logout-btn" onClick={handleLogout}>Sair</button>
-      </header>
-
-      <section className="messages" aria-live="polite" ref={messagesRef}>
-        <div className="messages-inner">
-          {messages.map((msg) => (
-            <article key={msg.id} className={`bubble ${msg.role}`}>
-              <MessageContent content={msg.content} />
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <Composer
-        text={text}
-        busy={busy}
-        error={error}
-        onChangeText={setText}
-        onSubmit={onSubmit}
-        onStop={onStop}
+      <Sidebar
+        sessions={sessions}
+        activeSessionId={activeSessionId}
+        onSelectSession={selectSession}
+        onCreateSession={handleNewSession}
+        onDeleteSession={handleDeleteSession}
       />
+      <div className="app-main">
+        <header className="app-header">
+          <div className="brand">ChatLLM Lab</div>
+          <button className="logout-btn" onClick={handleLogout}>Sair</button>
+        </header>
 
-      <div className="warning-banner">Lembre-se, voce precisa focar no experimento!!!</div>
+        <section className="messages" aria-live="polite" ref={messagesRef}>
+          <div className="messages-inner">
+            {messages.map((msg) => (
+              <article key={msg.id} className={`bubble ${msg.role}`}>
+                <MessageContent content={msg.content} />
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <Composer
+          text={text}
+          busy={busy}
+          error={error}
+          onChangeText={setText}
+          onSubmit={onSubmit}
+          onStop={onStop}
+        />
+
+        <div className="warning-banner">Lembre-se, voce precisa focar no experimento!!!</div>
+      </div>
     </main>
   );
 }
